@@ -66,7 +66,6 @@ def get_dokumen():
 def style_dataframe(df):
     def highlight_status(val):
         val_str = str(val).upper().strip()
-        # Mengatur warna berdasarkan request: Putih, Kuning, Merah, Hijau, Biru
         if val_str == 'DITERIMA':
             return 'background-color: #ffffff; color: #000000;'
         elif val_str == 'DALAM PROSES SIGN BUH':
@@ -79,7 +78,6 @@ def style_dataframe(df):
             return 'background-color: #cce5ff; color: #084298; font-weight: 600;'
         return ''
     
-    # Kompatibilitas untuk versi Pandas lama maupun baru
     try:
         return df.style.map(highlight_status, subset=['status'])
     except AttributeError:
@@ -93,6 +91,16 @@ def format_status_opsi(opsi):
     elif opsi == "Siap diambil": return "🟢 Siap diambil"
     elif opsi == "Selesai": return "🔵 Selesai"
     return opsi
+
+# --- MASTER DATA ---
+DAFTAR_DEPARTEMEN = sorted([
+    "ACCOUNTING", "BIODIESEL", "CC", "CONSUMER PACK", "CRUSHING", 
+    "EFFLUENT", "EHS", "ELECTRICAL", "FINANCE", "HRGA", 
+    "LOGISTIC", "MHE", "PPIC", "PROJECT", "PURCHASING", 
+    "QA", "QC", "QPE", "REF", "SECURITY & HUMAS", 
+    "SHIPPING", "SOLVENT", "STORE", "TANK FARM", 
+    "TRADING", "UTILITY", "WB"
+])
 
 # --- KONFIGURASI DESAIN TABEL INTERAKTIF ---
 CONFIG_TABEL = {
@@ -187,7 +195,8 @@ else:
                 st.markdown("##### 📥 Penginputan Berkas Baru Masuk")
                 col1, col2 = st.columns(2)
                 with col1:
-                    i_dept = st.text_input("Departemen").upper()
+                    # BERHASIL DIUBAH DI SINI 👇
+                    i_dept = st.selectbox("Departemen", ["-- Pilih Departemen --"] + DAFTAR_DEPARTEMEN)
                     i_pic = st.text_input("Nama PIC Berkas")
                     i_dokumen = st.text_input("Judul / Nama Dokumen Resmi")
                 with col2:
@@ -195,9 +204,9 @@ else:
                     i_urgency = st.selectbox("Prioritas Kecepatan", ["Normal", "High", "Urgent"])
                 
                 if st.form_submit_button("Simpan Dokumen Baru"):
-                    if i_dept and i_dokumen:
+                    if i_dept != "-- Pilih Departemen --" and i_dokumen:
                         supabase.table("dokumen").insert({
-                            "department": i_dept.strip(), 
+                            "department": i_dept, 
                             "pic": i_pic.strip(), 
                             "dokumen": i_dokumen.strip(),
                             "tanggal_masuk": str(i_tgl_masuk), 
@@ -207,7 +216,7 @@ else:
                         st.success("Dokumen berhasil dimasukkan ke sistem cloud!")
                         st.rerun()
                     else:
-                        st.error("Kolom Departemen dan Nama Dokumen bersyarat wajib diisi!")
+                        st.error("Kolom Departemen (wajib dipilih) dan Nama Dokumen bersyarat wajib diisi!")
 
         with tab_update:
             if not df_docs.empty:
@@ -243,7 +252,7 @@ else:
                                 "Status Operasional Terbaru:", 
                                 status_arr, 
                                 index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0,
-                                format_func=format_status_opsi  # Mengubah tampilan UI tanpa merubah data DB
+                                format_func=format_status_opsi
                             )
                             u_remark = st.text_input("Catatan Tambahan Sekretaris (Remark):", value=doc_terpilih['remark'] if pd.notna(doc_terpilih['remark']) else "")
                         with col_u2:
@@ -261,7 +270,6 @@ else:
                             
         with tab_database:
             st.markdown("##### 🌍 Seluruh Berkas Lintas Departemen PT Multi Nabati Sulawesi")
-            # Implementasi fungsi pewarnaan tabel
             df_to_show = df_docs[['department', 'pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']]
             st.dataframe(style_dataframe(df_to_show), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
 
@@ -296,13 +304,11 @@ else:
                     if df_outstanding.empty: 
                         st.success("Luar biasa! Tidak ada berkas outstanding. Seluruh dokumen Anda bersih bersertifikat.")
                     else: 
-                        # Tabel pengguna diwarnai sesuai status
                         st.dataframe(style_dataframe(df_outstanding[kolom_tampilan]), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
                 with tab_comp:
                     if df_completed.empty: 
                         st.info("Belum ada rekam jejak berkas berstatus selesai ditandatangani untuk departemen Anda.")
                     else: 
-                        # Tabel pengguna (selesai) diwarnai
                         st.dataframe(style_dataframe(df_completed[kolom_tampilan]), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
         else:
             st.warning("Gagal memproses sinkronisasi master data.")
