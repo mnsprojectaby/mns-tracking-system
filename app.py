@@ -173,19 +173,30 @@ else:
     df_docs = get_dokumen()
 
     if current_role == 'admin':
-        st.subheader("🛠️ Konsol Kendali Sekretaris (Admin Master)")
+        # BERHASIL DIUBAH DI SINI 👇 (Judul dan Metrik)
+        st.subheader("📊 Dashboard Monitoring Dokumen")
         
         if not df_docs.empty:
-            m_total = len(df_docs)
-            m_out = len(df_docs[~df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
-            m_rev = len(df_docs[df_docs['status'].str.upper() == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
-            m_done = len(df_docs[df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
+            df_docs['status_clean'] = df_docs['status'].astype(str).str.strip().str.upper()
             
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("📦 Total Semua Berkas", m_total)
-            c2.metric("⏳ Outstanding di BUH", m_out, delta_color="inverse")
-            c3.metric("⚠️ Perlu Tindakan Revisi", m_rev, delta_color="inverse")
-            c4.metric("✅ Selesai / Siap Diambil", m_done)
+            m_total = len(df_docs)
+            m_diterima = len(df_docs[df_docs['status_clean'] == 'DITERIMA'])
+            m_proses = len(df_docs[df_docs['status_clean'] == 'DALAM PROSES SIGN BUH'])
+            m_revisi = len(df_docs[df_docs['status_clean'] == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
+            m_siap = len(df_docs[df_docs['status_clean'] == 'SIAP DIAMBIL'])
+            m_selesai = len(df_docs[df_docs['status_clean'] == 'SELESAI'])
+            
+            # Baris Metrik Pertama
+            c1, c2, c3 = st.columns(3)
+            c1.metric("📦 Total Keseluruhan", m_total)
+            c2.metric("⚪ Diterima", m_diterima)
+            c3.metric("🟡 Dalam Proses Sign BUH", m_proses)
+            
+            # Baris Metrik Kedua
+            c4, c5, c6 = st.columns(3)
+            c4.metric("🔴 Revisi", m_revisi)
+            c5.metric("🟢 Siap diambil", m_siap)
+            c6.metric("🔵 Selesai", m_selesai)
             st.markdown("<br>", unsafe_allow_html=True)
 
         tab_tambah, tab_update, tab_database = st.tabs(["➕ Registrasi Berkas Baru", "📝 Pembaharuan Status & Catatan", "🗂️ Master Database Global"])
@@ -195,7 +206,6 @@ else:
                 st.markdown("##### 📥 Penginputan Berkas Baru Masuk")
                 col1, col2 = st.columns(2)
                 with col1:
-                    # BERHASIL DIUBAH DI SINI 👇
                     i_dept = st.selectbox("Departemen", ["-- Pilih Departemen --"] + DAFTAR_DEPARTEMEN)
                     i_pic = st.text_input("Nama PIC Berkas")
                     i_dokumen = st.text_input("Judul / Nama Dokumen Resmi")
