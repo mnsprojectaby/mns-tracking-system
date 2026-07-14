@@ -62,6 +62,38 @@ def get_dokumen():
     response = supabase.table("dokumen").select("*").order("id", desc=True).execute()
     return pd.DataFrame(response.data)
 
+# --- FUNGSI PEWARNAAN TABEL (PANDAS STYLER) ---
+def style_dataframe(df):
+    def highlight_status(val):
+        val_str = str(val).upper().strip()
+        # Mengatur warna berdasarkan request: Putih, Kuning, Merah, Hijau, Biru
+        if val_str == 'DITERIMA':
+            return 'background-color: #ffffff; color: #000000;'
+        elif val_str == 'DALAM PROSES SIGN BUH':
+            return 'background-color: #fff3cd; color: #664d03; font-weight: 600;'
+        elif val_str == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)':
+            return 'background-color: #f8d7da; color: #842029; font-weight: 600;'
+        elif val_str == 'SIAP DIAMBIL':
+            return 'background-color: #d1e7dd; color: #0f5132; font-weight: 600;'
+        elif val_str == 'SELESAI':
+            return 'background-color: #cce5ff; color: #084298; font-weight: 600;'
+        return ''
+    
+    # Kompatibilitas untuk versi Pandas lama maupun baru
+    try:
+        return df.style.map(highlight_status, subset=['status'])
+    except AttributeError:
+        return df.style.applymap(highlight_status, subset=['status'])
+
+# --- FUNGSI TAMPILAN DROPDOWN (FORMAT_FUNC) ---
+def format_status_opsi(opsi):
+    if opsi == "Diterima": return "⚪ Diterima"
+    elif opsi == "Dalam Proses Sign BUH": return "🟡 Dalam Proses Sign BUH"
+    elif opsi == "Revisi (Detail Revisi Hubungi Sekretaris)": return "🔴 Revisi"
+    elif opsi == "Siap diambil": return "🟢 Siap diambil"
+    elif opsi == "Selesai": return "🔵 Selesai"
+    return opsi
+
 # --- KONFIGURASI DESAIN TABEL INTERAKTIF ---
 CONFIG_TABEL = {
     "department": st.column_config.TextColumn("🏢 Departemen", help="Departemen pemilik berkas", width="medium"),
@@ -137,7 +169,6 @@ else:
         
         if not df_docs.empty:
             m_total = len(df_docs)
-            # Outstanding = Semua yang belum berstatus Selesai / Siap diambil
             m_out = len(df_docs[~df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
             m_rev = len(df_docs[df_docs['status'].str.upper() == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
             m_done = len(df_docs[df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
@@ -171,7 +202,7 @@ else:
                             "dokumen": i_dokumen.strip(),
                             "tanggal_masuk": str(i_tgl_masuk), 
                             "urgency": i_urgency, 
-                            "status": "Diterima"  # Default status disesuaikan menjadi Bahasa Indonesia
+                            "status": "Diterima"
                         }).execute()
                         st.success("Dokumen berhasil dimasukkan ke sistem cloud!")
                         st.rerun()
@@ -183,12 +214,12 @@ else:
                 def format_dropdown_label(row):
                     stat = str(row['status']).upper().strip()
                     base_text = f"{row['id']} - {row['dokumen']} [{row['department']}]"
-                    if stat in ['SELESAI', 'SIAP DIAMBIL']: 
-                        return f"{base_text} ➔ ✅ {row['status']}"
-                    elif stat == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)': 
-                        return f"{base_text} ➔ ⚠️ Revisi"
-                    else: 
-                        return f"{base_text} ➔ ⏳ {row['status']}"
+                    if stat == 'DITERIMA': return f"{base_text} ➔ ⚪ Diterima"
+                    elif stat == 'DALAM PROSES SIGN BUH': return f"{base_text} ➔ 🟡 Proses BUH"
+                    elif stat == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)': return f"{base_text} ➔ 🔴 Revisi"
+                    elif stat == 'SIAP DIAMBIL': return f"{base_text} ➔ 🟢 Siap Diambil"
+                    elif stat == 'SELESAI': return f"{base_text} ➔ 🔵 Selesai"
+                    else: return f"{base_text} ➔ ⏳ {row['status']}"
 
                 df_docs['dropdown_label'] = df_docs.apply(format_dropdown_label, axis=1)
                 pilihan_dokumen = st.selectbox("Pilih berkas yang ingin diubah kinerjanya:", df_docs['dropdown_label'])
@@ -201,7 +232,6 @@ else:
                         st.markdown(f"##### 📋 Formulir Evaluasi: `{doc_terpilih['dokumen']}`")
                         col_u1, col_u2 = st.columns(2)
                         with col_u1:
-                            # BERHASIL DIUBAH DI SINI 👇
                             status_arr = [
                                 "Diterima", 
                                 "Dalam Proses Sign BUH", 
@@ -212,7 +242,8 @@ else:
                             u_status = st.selectbox(
                                 "Status Operasional Terbaru:", 
                                 status_arr, 
-                                index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0
+                                index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0,
+                                format_func=format_status_opsi  # Mengubah tampilan UI tanpa merubah data DB
                             )
                             u_remark = st.text_input("Catatan Tambahan Sekretaris (Remark):", value=doc_terpilih['remark'] if pd.notna(doc_terpilih['remark']) else "")
                         with col_u2:
@@ -230,7 +261,9 @@ else:
                             
         with tab_database:
             st.markdown("##### 🌍 Seluruh Berkas Lintas Departemen PT Multi Nabati Sulawesi")
-            st.dataframe(df_docs[['department', 'pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+            # Implementasi fungsi pewarnaan tabel
+            df_to_show = df_docs[['department', 'pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']]
+            st.dataframe(style_dataframe(df_to_show), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
 
     else:
         st.subheader(f"📊 Dashboard Monitoring Dokumen Internal")
@@ -263,11 +296,13 @@ else:
                     if df_outstanding.empty: 
                         st.success("Luar biasa! Tidak ada berkas outstanding. Seluruh dokumen Anda bersih bersertifikat.")
                     else: 
-                        st.dataframe(df_outstanding[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+                        # Tabel pengguna diwarnai sesuai status
+                        st.dataframe(style_dataframe(df_outstanding[kolom_tampilan]), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
                 with tab_comp:
                     if df_completed.empty: 
                         st.info("Belum ada rekam jejak berkas berstatus selesai ditandatangani untuk departemen Anda.")
                     else: 
-                        st.dataframe(df_completed[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+                        # Tabel pengguna (selesai) diwarnai
+                        st.dataframe(style_dataframe(df_completed[kolom_tampilan]), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
         else:
             st.warning("Gagal memproses sinkronisasi master data.")
