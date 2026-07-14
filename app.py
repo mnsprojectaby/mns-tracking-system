@@ -102,7 +102,6 @@ DAFTAR_DEPARTEMEN = sorted([
     "TRADING", "UTILITY", "WB"
 ])
 
-# Urutan status logika untuk penyortiran tabel
 STATUS_ORDER = [
     "Diterima", 
     "Dalam Proses Sign BUH", 
@@ -133,9 +132,9 @@ if 'is_logged_in' not in st.session_state:
     st.session_state.session_dept = None
     st.session_state.session_role = None
 
-# Header Korporat
+# Header Korporat (DIPERBARUI DI SINI)
 st.markdown("<h1 style='color: #0f172a; margin-bottom: 0px;'>📑 Document Tracking Portal</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #64748b; font-size: 15px;'>Multi Nabati Sulawesi — Independent BUH Sign Monitoring System</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #64748b; font-size: 15px;'>Multi Nabati Sulawesi — Sign Monitoring System</p>", unsafe_allow_html=True)
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 # --- 4. PORTAL LOGIN ---
@@ -185,23 +184,19 @@ else:
         st.subheader("📊 Dashboard Monitoring Dokumen")
         
         if not df_docs.empty:
-            # BERHASIL DIUBAH DI SINI 👇: Sistem Filter Tanggal Harian
             list_tanggal = sorted(df_docs['tanggal_masuk'].dropna().unique().tolist(), reverse=True)
             
             col_filter, _ = st.columns([1, 2])
             with col_filter:
                 filter_tgl = st.selectbox("📅 Rekap Harian (Filter Tanggal Masuk):", ["Semua Waktu"] + list_tanggal)
             
-            # Terapkan filter tanggal ke data
             if filter_tgl != "Semua Waktu":
                 df_admin = df_docs[df_docs['tanggal_masuk'] == filter_tgl].copy()
             else:
                 df_admin = df_docs.copy()
             
-            # Urutkan berdasarkan tahapan status (Diterima -> ... -> Selesai)
             df_admin['status_cat'] = pd.Categorical(df_admin['status'], categories=STATUS_ORDER, ordered=True)
             df_admin = df_admin.sort_values(by=['status_cat', 'id'], ascending=[True, False]).drop(columns=['status_cat'])
-            
             df_admin['status_clean'] = df_admin['status'].astype(str).str.strip().str.upper()
             
             m_total = len(df_admin)
@@ -211,7 +206,6 @@ else:
             m_siap = len(df_admin[df_admin['status_clean'] == 'SIAP DIAMBIL'])
             m_selesai = len(df_admin[df_admin['status_clean'] == 'SELESAI'])
             
-            # Baris Metrik (Otomatis merekap sesuai filter tanggal)
             c1, c2, c3 = st.columns(3)
             c1.metric("📦 Total Keseluruhan", m_total)
             c2.metric("⚪ Diterima", m_diterima)
@@ -253,8 +247,6 @@ else:
                         st.error("Kolom Departemen (wajib dipilih) dan Nama Dokumen bersyarat wajib diisi!")
 
         with tab_update:
-            # Gunakan df_admin agar dropdown update hanya menampilkan data pada tanggal yang difilter 
-            # dan sudah terurut berdasarkan status operasional
             if not df_docs.empty and not df_admin.empty:
                 def format_dropdown_label(row):
                     stat = str(row['status']).upper().strip()
