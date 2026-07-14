@@ -70,7 +70,11 @@ CONFIG_TABEL = {
     "tanggal_masuk": st.column_config.DateColumn("📅 Tanggal Masuk", format="DD MMM YYYY"),
     "tanggal_ambil": st.column_config.DateColumn("📦 Tanggal Ambil", format="DD MMM YYYY"),
     "urgency": st.column_config.SelectboxColumn("🚨 Urgency", options=["Normal", "High", "Urgent"], required=True),
-    "status": st.column_config.SelectboxColumn("⚙️ Status Berkas", options=["Received", "Pending BUH", "Revision Required", "Completed"], required=True),
+    "status": st.column_config.SelectboxColumn(
+        "⚙️ Status Berkas", 
+        options=["Diterima", "Dalam Proses Sign BUH", "Revisi (Detail Revisi Hubungi Sekretaris)", "Siap diambil", "Selesai"], 
+        required=True
+    ),
     "remark": st.column_config.TextColumn("💬 Catatan / Remark", width="large")
 }
 
@@ -133,15 +137,16 @@ else:
         
         if not df_docs.empty:
             m_total = len(df_docs)
-            m_out = len(df_docs[df_docs['status'].str.upper() != 'COMPLETED'])
-            m_rev = len(df_docs[df_docs['status'].str.upper() == 'REVISION REQUIRED'])
-            m_done = len(df_docs[df_docs['status'].str.upper() == 'COMPLETED'])
+            # Outstanding = Semua yang belum berstatus Selesai / Siap diambil
+            m_out = len(df_docs[~df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
+            m_rev = len(df_docs[df_docs['status'].str.upper() == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
+            m_done = len(df_docs[df_docs['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
             
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("📦 Total Semua Berkas", m_total)
             c2.metric("⏳ Outstanding di BUH", m_out, delta_color="inverse")
             c3.metric("⚠️ Perlu Tindakan Revisi", m_rev, delta_color="inverse")
-            c4.metric("✅ Selesai Ditandatangani", m_done)
+            c4.metric("✅ Selesai / Siap Diambil", m_done)
             st.markdown("<br>", unsafe_allow_html=True)
 
         tab_tambah, tab_update, tab_database = st.tabs(["➕ Registrasi Berkas Baru", "📝 Pembaharuan Status & Catatan", "🗂️ Master Database Global"])
@@ -151,7 +156,6 @@ else:
                 st.markdown("##### 📥 Penginputan Berkas Baru Masuk")
                 col1, col2 = st.columns(2)
                 with col1:
-                    # LABEL BERHASIL DIUBAH DI SINI 👇
                     i_dept = st.text_input("Departemen").upper()
                     i_pic = st.text_input("Nama PIC Berkas")
                     i_dokumen = st.text_input("Judul / Nama Dokumen Resmi")
@@ -162,8 +166,12 @@ else:
                 if st.form_submit_button("Simpan Dokumen Baru"):
                     if i_dept and i_dokumen:
                         supabase.table("dokumen").insert({
-                            "department": i_dept.strip(), "pic": i_pic.strip(), "dokumen": i_dokumen.strip(),
-                            "tanggal_masuk": str(i_tgl_masuk), "urgency": i_urgency, "status": "Received"
+                            "department": i_dept.strip(), 
+                            "pic": i_pic.strip(), 
+                            "dokumen": i_dokumen.strip(),
+                            "tanggal_masuk": str(i_tgl_masuk), 
+                            "urgency": i_urgency, 
+                            "status": "Diterima"  # Default status disesuaikan menjadi Bahasa Indonesia
                         }).execute()
                         st.success("Dokumen berhasil dimasukkan ke sistem cloud!")
                         st.rerun()
@@ -175,9 +183,12 @@ else:
                 def format_dropdown_label(row):
                     stat = str(row['status']).upper().strip()
                     base_text = f"{row['id']} - {row['dokumen']} [{row['department']}]"
-                    if stat == 'COMPLETED': return f"{base_text} ➔ ✅ Selesai"
-                    elif stat == 'REVISION REQUIRED': return f"{base_text} ➔ ⚠️ Revisi"
-                    else: return f"{base_text} ➔ ⏳ {row['status']}"
+                    if stat in ['SELESAI', 'SIAP DIAMBIL']: 
+                        return f"{base_text} ➔ ✅ {row['status']}"
+                    elif stat == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)': 
+                        return f"{base_text} ➔ ⚠️ Revisi"
+                    else: 
+                        return f"{base_text} ➔ ⏳ {row['status']}"
 
                 df_docs['dropdown_label'] = df_docs.apply(format_dropdown_label, axis=1)
                 pilihan_dokumen = st.selectbox("Pilih berkas yang ingin diubah kinerjanya:", df_docs['dropdown_label'])
@@ -190,8 +201,19 @@ else:
                         st.markdown(f"##### 📋 Formulir Evaluasi: `{doc_terpilih['dokumen']}`")
                         col_u1, col_u2 = st.columns(2)
                         with col_u1:
-                            status_arr = ["Received", "Pending BUH", "Revision Required", "Completed"]
-                            u_status = st.selectbox("Status Operasional Terbaru:", status_arr, index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0)
+                            # BERHASIL DIUBAH DI SINI 👇
+                            status_arr = [
+                                "Diterima", 
+                                "Dalam Proses Sign BUH", 
+                                "Revisi (Detail Revisi Hubungi Sekretaris)", 
+                                "Siap diambil", 
+                                "Selesai"
+                            ]
+                            u_status = st.selectbox(
+                                "Status Operasional Terbaru:", 
+                                status_arr, 
+                                index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0
+                            )
                             u_remark = st.text_input("Catatan Tambahan Sekretaris (Remark):", value=doc_terpilih['remark'] if pd.notna(doc_terpilih['remark']) else "")
                         with col_u2:
                             tgl_db = doc_terpilih.get('tanggal_ambil')
@@ -217,9 +239,9 @@ else:
             df_docs['dept_clean'] = df_docs['department'].astype(str).str.strip().str.upper()
             df_filtered = df_docs[df_docs['dept_clean'] == current_dept.strip().upper()]
             
-            m_user_out = len(df_filtered[df_filtered['status'].str.upper() != 'COMPLETED'])
-            m_user_rev = len(df_filtered[df_filtered['status'].str.upper() == 'REVISION REQUIRED'])
-            m_user_done = len(df_filtered[df_filtered['status'].str.upper() == 'COMPLETED'])
+            m_user_out = len(df_filtered[~df_filtered['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
+            m_user_rev = len(df_filtered[df_filtered['status'].str.upper() == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
+            m_user_done = len(df_filtered[df_filtered['status'].str.upper().isin(['SELESAI', 'SIAP DIAMBIL'])])
             
             uc1, uc2, uc3 = st.columns(3)
             uc1.metric("⏳ Berkas Outstanding di Meja BUH", m_user_out)
@@ -232,16 +254,20 @@ else:
             else:
                 kolom_tampilan = ['pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']
                 df_filtered['status_clean'] = df_filtered['status'].astype(str).str.strip().str.upper()
-                df_completed = df_filtered[df_filtered['status_clean'] == 'COMPLETED']
-                df_outstanding = df_filtered[df_filtered['status_clean'] != 'COMPLETED']
+                df_completed = df_filtered[df_filtered['status_clean'].isin(['SELESAI', 'SIAP DIAMBIL'])]
+                df_outstanding = df_filtered[~df_filtered['status_clean'].isin(['SELESAI', 'SIAP DIAMBIL'])]
                 
                 tab_out, tab_comp = st.tabs(["⏳ Berkas Outstanding (Prioritas Pantau)", "✅ Berkas Completed (Arsip Riwayat)"])
                 
                 with tab_out:
-                    if df_outstanding.empty: st.success("Luar biasa! Tidak ada berkas outstanding. Seluruh dokumen Anda bersih bersertifikat.")
-                    else: st.dataframe(df_outstanding[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+                    if df_outstanding.empty: 
+                        st.success("Luar biasa! Tidak ada berkas outstanding. Seluruh dokumen Anda bersih bersertifikat.")
+                    else: 
+                        st.dataframe(df_outstanding[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
                 with tab_comp:
-                    if df_completed.empty: st.info("Belum ada rekam jejak berkas berstatus selesai ditandatangani untuk departemen Anda.")
-                    else: st.dataframe(df_completed[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+                    if df_completed.empty: 
+                        st.info("Belum ada rekam jejak berkas berstatus selesai ditandatangani untuk departemen Anda.")
+                    else: 
+                        st.dataframe(df_completed[kolom_tampilan], use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
         else:
             st.warning("Gagal memproses sinkronisasi master data.")
