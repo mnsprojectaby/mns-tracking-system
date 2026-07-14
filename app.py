@@ -151,7 +151,8 @@ else:
                 st.markdown("##### 📥 Penginputan Berkas Baru Masuk")
                 col1, col2 = st.columns(2)
                 with col1:
-                    i_dept = st.text_input("Departemen Pengusul (Contoh: COST CONTROL)").upper()
+                    # LABEL BERHASIL DIUBAH DI SINI 👇
+                    i_dept = st.text_input("Departemen").upper()
                     i_pic = st.text_input("Nama PIC Berkas")
                     i_dokumen = st.text_input("Judul / Nama Dokumen Resmi")
                 with col2:
