@@ -102,6 +102,15 @@ DAFTAR_DEPARTEMEN = sorted([
     "TRADING", "UTILITY", "WB"
 ])
 
+# Urutan status logika untuk penyortiran tabel
+STATUS_ORDER = [
+    "Diterima", 
+    "Dalam Proses Sign BUH", 
+    "Revisi (Detail Revisi Hubungi Sekretaris)", 
+    "Siap diambil", 
+    "Selesai"
+]
+
 # --- KONFIGURASI DESAIN TABEL INTERAKTIF ---
 CONFIG_TABEL = {
     "department": st.column_config.TextColumn("🏢 Departemen", help="Departemen pemilik berkas", width="medium"),
@@ -112,7 +121,7 @@ CONFIG_TABEL = {
     "urgency": st.column_config.SelectboxColumn("🚨 Urgency", options=["Normal", "High", "Urgent"], required=True),
     "status": st.column_config.SelectboxColumn(
         "⚙️ Status Berkas", 
-        options=["Diterima", "Dalam Proses Sign BUH", "Revisi (Detail Revisi Hubungi Sekretaris)", "Siap diambil", "Selesai"], 
+        options=STATUS_ORDER, 
         required=True
     ),
     "remark": st.column_config.TextColumn("💬 Catatan / Remark", width="large")
@@ -173,26 +182,41 @@ else:
     df_docs = get_dokumen()
 
     if current_role == 'admin':
-        # BERHASIL DIUBAH DI SINI 👇 (Judul dan Metrik)
         st.subheader("📊 Dashboard Monitoring Dokumen")
         
         if not df_docs.empty:
-            df_docs['status_clean'] = df_docs['status'].astype(str).str.strip().str.upper()
+            # BERHASIL DIUBAH DI SINI 👇: Sistem Filter Tanggal Harian
+            list_tanggal = sorted(df_docs['tanggal_masuk'].dropna().unique().tolist(), reverse=True)
             
-            m_total = len(df_docs)
-            m_diterima = len(df_docs[df_docs['status_clean'] == 'DITERIMA'])
-            m_proses = len(df_docs[df_docs['status_clean'] == 'DALAM PROSES SIGN BUH'])
-            m_revisi = len(df_docs[df_docs['status_clean'] == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
-            m_siap = len(df_docs[df_docs['status_clean'] == 'SIAP DIAMBIL'])
-            m_selesai = len(df_docs[df_docs['status_clean'] == 'SELESAI'])
+            col_filter, _ = st.columns([1, 2])
+            with col_filter:
+                filter_tgl = st.selectbox("📅 Rekap Harian (Filter Tanggal Masuk):", ["Semua Waktu"] + list_tanggal)
             
-            # Baris Metrik Pertama
+            # Terapkan filter tanggal ke data
+            if filter_tgl != "Semua Waktu":
+                df_admin = df_docs[df_docs['tanggal_masuk'] == filter_tgl].copy()
+            else:
+                df_admin = df_docs.copy()
+            
+            # Urutkan berdasarkan tahapan status (Diterima -> ... -> Selesai)
+            df_admin['status_cat'] = pd.Categorical(df_admin['status'], categories=STATUS_ORDER, ordered=True)
+            df_admin = df_admin.sort_values(by=['status_cat', 'id'], ascending=[True, False]).drop(columns=['status_cat'])
+            
+            df_admin['status_clean'] = df_admin['status'].astype(str).str.strip().str.upper()
+            
+            m_total = len(df_admin)
+            m_diterima = len(df_admin[df_admin['status_clean'] == 'DITERIMA'])
+            m_proses = len(df_admin[df_admin['status_clean'] == 'DALAM PROSES SIGN BUH'])
+            m_revisi = len(df_admin[df_admin['status_clean'] == 'REVISI (DETAIL REVISI HUBUNGI SEKRETARIS)'])
+            m_siap = len(df_admin[df_admin['status_clean'] == 'SIAP DIAMBIL'])
+            m_selesai = len(df_admin[df_admin['status_clean'] == 'SELESAI'])
+            
+            # Baris Metrik (Otomatis merekap sesuai filter tanggal)
             c1, c2, c3 = st.columns(3)
             c1.metric("📦 Total Keseluruhan", m_total)
             c2.metric("⚪ Diterima", m_diterima)
             c3.metric("🟡 Dalam Proses Sign BUH", m_proses)
             
-            # Baris Metrik Kedua
             c4, c5, c6 = st.columns(3)
             c4.metric("🔴 Revisi", m_revisi)
             c5.metric("🟢 Siap diambil", m_siap)
@@ -229,7 +253,9 @@ else:
                         st.error("Kolom Departemen (wajib dipilih) dan Nama Dokumen bersyarat wajib diisi!")
 
         with tab_update:
-            if not df_docs.empty:
+            # Gunakan df_admin agar dropdown update hanya menampilkan data pada tanggal yang difilter 
+            # dan sudah terurut berdasarkan status operasional
+            if not df_docs.empty and not df_admin.empty:
                 def format_dropdown_label(row):
                     stat = str(row['status']).upper().strip()
                     base_text = f"{row['id']} - {row['dokumen']} [{row['department']}]"
@@ -240,28 +266,21 @@ else:
                     elif stat == 'SELESAI': return f"{base_text} ➔ 🔵 Selesai"
                     else: return f"{base_text} ➔ ⏳ {row['status']}"
 
-                df_docs['dropdown_label'] = df_docs.apply(format_dropdown_label, axis=1)
-                pilihan_dokumen = st.selectbox("Pilih berkas yang ingin diubah kinerjanya:", df_docs['dropdown_label'])
+                df_admin['dropdown_label'] = df_admin.apply(format_dropdown_label, axis=1)
+                pilihan_dokumen = st.selectbox("Pilih berkas yang ingin diubah kinerjanya (mengikuti filter tanggal di atas):", df_admin['dropdown_label'])
                 
                 if pilihan_dokumen:
                     doc_id = int(pilihan_dokumen.split(" - ")[0])
-                    doc_terpilih = df_docs[df_docs['id'] == doc_id].iloc[0]
+                    doc_terpilih = df_admin[df_admin['id'] == doc_id].iloc[0]
                     
                     with st.form("form_update"):
                         st.markdown(f"##### 📋 Formulir Evaluasi: `{doc_terpilih['dokumen']}`")
                         col_u1, col_u2 = st.columns(2)
                         with col_u1:
-                            status_arr = [
-                                "Diterima", 
-                                "Dalam Proses Sign BUH", 
-                                "Revisi (Detail Revisi Hubungi Sekretaris)", 
-                                "Siap diambil", 
-                                "Selesai"
-                            ]
                             u_status = st.selectbox(
                                 "Status Operasional Terbaru:", 
-                                status_arr, 
-                                index=status_arr.index(doc_terpilih['status']) if doc_terpilih['status'] in status_arr else 0,
+                                STATUS_ORDER, 
+                                index=STATUS_ORDER.index(doc_terpilih['status']) if doc_terpilih['status'] in STATUS_ORDER else 0,
                                 format_func=format_status_opsi
                             )
                             u_remark = st.text_input("Catatan Tambahan Sekretaris (Remark):", value=doc_terpilih['remark'] if pd.notna(doc_terpilih['remark']) else "")
@@ -277,11 +296,16 @@ else:
                             }).eq("id", doc_id).execute()
                             st.success("Database berhasil dimutakhirkan!")
                             st.rerun()
+            elif not df_docs.empty and df_admin.empty:
+                st.info("Tidak ada dokumen yang masuk pada tanggal tersebut.")
                             
         with tab_database:
-            st.markdown("##### 🌍 Seluruh Berkas Lintas Departemen PT Multi Nabati Sulawesi")
-            df_to_show = df_docs[['department', 'pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']]
-            st.dataframe(style_dataframe(df_to_show), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+            st.markdown("##### 🌍 Seluruh Berkas Terurut Sesuai Tahapan Status")
+            if not df_admin.empty:
+                df_to_show = df_admin[['department', 'pic', 'dokumen', 'tanggal_masuk', 'tanggal_ambil', 'urgency', 'status', 'remark']]
+                st.dataframe(style_dataframe(df_to_show), use_container_width=True, column_config=CONFIG_TABEL, hide_index=True)
+            else:
+                st.info("Data kosong untuk tanggal ini.")
 
     else:
         st.subheader(f"📊 Dashboard Monitoring Dokumen Internal")
